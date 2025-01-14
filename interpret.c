@@ -96,6 +96,38 @@ void assert(intptr_t *t) {
  * Interpretation---
  */
 
+/* "trail" of "breadcrumbs" for backtracking */
+struct Crumb {
+  intptr_t *addr, val;
+  struct Crumb *next;
+};
+
+struct Crumb *trail = NULL;
+
+/* insert dummy crumb for choicepoint */
+void insert_choicepoint(void) {
+  struct Crumb *this = malloc(sizeof(struct Crumb));
+  this->addr = NULL;
+  this->next = trail;
+  trail = this;
+}
+
+/* undo until the last choicepoint */
+void undo_bindings(void) {
+  struct Crumb *old_trail;
+  while (trail && trail->addr) {
+    *trail->addr = trail->val;
+    old_trail = trail;
+    trail = trail->next;
+    free(old_trail);
+  }
+  if (trail) {
+    old_trail = trail;
+    trail = trail->next;
+    free(old_trail);
+  }
+}
+
 /* Find the representative of a term
  *
  * Note: unlike some Prolog implementations that use a
@@ -112,7 +144,7 @@ intptr_t *rep(intptr_t *t) {
 /* Unify arbitrary terms a and b
  *
  * Side effects: modifies variables a and b so they are
- *  equal
+ *  equal, adds to trail
  */
 int unify(intptr_t *a, intptr_t *b) {
   a = rep(a);
@@ -130,9 +162,19 @@ int unify(intptr_t *a, intptr_t *b) {
     }
     return 1;
   } else if (*a % 2 == 0) {
+    struct Crumb *this = malloc(sizeof(struct Crumb));
+    this->addr = a;
+    this->val = *a;
+    this->next = trail;
+    trail = this;
     *a = (intptr_t)b;
     return 1;
   } else if (*b % 2 == 0) {
+    struct Crumb *this = malloc(sizeof(struct Crumb));
+    this->addr = b;
+    this->val = *b;
+    this->next = trail;
+    trail = this;
     *b = (intptr_t)a;
     return 1;
   } 
@@ -190,7 +232,7 @@ int match(intptr_t *template, intptr_t *t,
 	}
 	return 1;
       } else {
-	/* functor is different, so this is a failure*/
+	/* functor is different, so this is a failure */
 	return 0;
       }
     } else {
@@ -224,14 +266,21 @@ int execute(intptr_t *call) {
 	calloc(c->vars, sizeof(intptr_t *));
 
       /* match up the head and the predicate call */
-      if(!match(c->lhs, call, vars)) {
-	return 0;
+      insert_choicepoint();
+      if (!match(c->lhs, call, vars)) {
+        undo_bindings();
+	continue;
       }
 
       if (c->rhs) {
 	/* execute the body */
 	intptr_t *body = copy_template(c->rhs, vars);
-	return execute(body);
+	insert_choicepoint();
+	if (!execute(body)) {
+	  undo_bindings();
+	  continue;
+	}
+	return 1;
       } else {
 	/* return true since this is a fact */
 	return 1;
