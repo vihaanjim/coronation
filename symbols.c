@@ -8,6 +8,7 @@
 struct FunctorPair {
   char *name;
   char arity;
+  void *data;
 };
 
 struct FunctorPair *table = NULL;
@@ -35,6 +36,7 @@ intptr_t symbol_index(char *name, char arity) {
   // are heap-allocated
   table[table_length].name = name;
   table[table_length].arity = arity;
+  table[table_length].data = NULL;
 
   return 2*(table_length++) + 1;
 }
@@ -54,6 +56,15 @@ int functor_arity(intptr_t functor) {
     return table[true_functor].arity;
   } else {
     return -0xdead;
+  }
+}
+
+void **functor_data(intptr_t functor) {
+  int true_functor = (functor - 1) / 2;
+  if (table && true_functor < table_length) {
+    return &table[true_functor].data;
+  } else {
+    return NULL;
   }
 }
 

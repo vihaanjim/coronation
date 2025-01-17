@@ -10,6 +10,8 @@ char *functor_name(intptr_t functor);
 
 int functor_arity(intptr_t functor);
 
+void **functor_data(intptr_t functor);
+
 void print_term(intptr_t *p);
 
 #endif

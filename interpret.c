@@ -13,9 +13,8 @@
 struct Clause {
   int vars;
   intptr_t *lhs, *rhs;
+  struct Clause *next;
 };
-
-List *clauses = NULL;
 
 void __variable_replace(intptr_t *t, List **l, int *elements) {
   int a = functor_arity(*t);
@@ -74,13 +73,32 @@ int variable_replace(intptr_t *t) {
  */
 void assert(intptr_t *t) {
   int vars = variable_replace(t);
-  List *this = malloc(sizeof(List));
   struct Clause *clause = malloc(sizeof(struct Clause));
 
   clause->vars = vars;
-  this->item = clause;
-  this->next = clauses;
-  clauses = this;
+  clause->next = NULL;
+
+  /* find the predicate, keeping in mind if this is a
+     rule or fact */
+  intptr_t predicate;
+  if (!strcmp(functor_name(*t), ":-") && functor_arity(*t) == 2) {
+    predicate = *(intptr_t *)*(t+1);
+  } else {
+    predicate = *t;
+  }
+
+  /* add the clause to its functor's list */
+  struct Clause **fdata = (struct Clause **)functor_data(predicate);
+  if (*fdata) {
+    struct Clause *el;
+    for (el = *fdata; el->next; el = el->next) {
+      /* skip to the end */
+    }
+    el->next = clause;
+  } else {
+    *fdata = clause;
+  }
+
   if (!strcmp(functor_name(*t), ":-") && functor_arity(*t) == 2) {
     /* this is a rule */
     clause->lhs = (intptr_t *)*(t+1);
@@ -253,38 +271,38 @@ int match(intptr_t *template, intptr_t *t,
   }
 }
 
+/* the 'and' functor */
+/* intptr_t and_f; */
+
 /* Execute the call (represented as a term)
  *
- * Side effects: performs unification on call
+ * Side effects: performs unification on call, but
+ *  undoes it in the case of failure
  */
 int execute(intptr_t *call) {
-  struct Clause *c;
-  for (List *l = clauses; l; l = l->next) {
-    c = (struct Clause *)l->item;
-    if (*c->lhs == *call) {
-      intptr_t **vars =
-	calloc(c->vars, sizeof(intptr_t *));
+  struct Clause *c = *(struct Clause **)functor_data(*call);
+  for (; c; c = c->next) {
+    intptr_t **vars =
+      calloc(c->vars, sizeof(intptr_t *));
 
-      /* match up the head and the predicate call */
-      insert_choicepoint();
-      if (!match(c->lhs, call, vars)) {
-        undo_bindings();
+    /* match up the head and the predicate call */
+    insert_choicepoint();
+    if (!match(c->lhs, call, vars)) {
+      undo_bindings();
+      continue;
+    }
+
+    if (c->rhs) {
+      /* execute the body */
+      intptr_t *body = copy_template(c->rhs, vars);
+      if (!execute(body)) {
+	undo_bindings();
 	continue;
       }
-
-      if (c->rhs) {
-	/* execute the body */
-	intptr_t *body = copy_template(c->rhs, vars);
-	insert_choicepoint();
-	if (!execute(body)) {
-	  undo_bindings();
-	  continue;
-	}
-	return 1;
-      } else {
-	/* return true since this is a fact */
-	return 1;
-      }
+      return 1;
+    } else {
+      /* return true since this is a fact */
+      return 1;
     }
   }
 
@@ -294,6 +312,7 @@ int execute(intptr_t *call) {
 
 /* Executes the main predicate */
 int execute_main(void) {
+  /* and_f = symbol_index("and", 2); */
   intptr_t main_symbol = symbol_index("main", 0);
   return execute(&main_symbol);
 }
