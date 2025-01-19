@@ -116,7 +116,7 @@ void assert(intptr_t *t) {
 
 /* "trail" of "breadcrumbs" for backtracking */
 struct Crumb {
-  intptr_t *addr, val;
+  intptr_t *addr;
   struct Crumb *next;
 };
 
@@ -134,7 +134,7 @@ void insert_choicepoint(void) {
 void undo_bindings(void) {
   struct Crumb *old_trail;
   while (trail && trail->addr) {
-    *trail->addr = trail->val;
+    *trail->addr = (intptr_t)NULL;
     old_trail = trail;
     trail = trail->next;
     free(old_trail);
@@ -182,7 +182,6 @@ int unify(intptr_t *a, intptr_t *b) {
   } else if (*a % 2 == 0) {
     struct Crumb *this = malloc(sizeof(struct Crumb));
     this->addr = a;
-    this->val = *a;
     this->next = trail;
     trail = this;
     *a = (intptr_t)b;
@@ -190,7 +189,6 @@ int unify(intptr_t *a, intptr_t *b) {
   } else if (*b % 2 == 0) {
     struct Crumb *this = malloc(sizeof(struct Crumb));
     this->addr = b;
-    this->val = *b;
     this->next = trail;
     trail = this;
     *b = (intptr_t)a;
